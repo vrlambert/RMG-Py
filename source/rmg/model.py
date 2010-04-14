@@ -42,11 +42,14 @@ import reaction
 import species
 import unirxn.network
 
+import multiprocessing
+
 def reactwithcorespecies(coreSpecies):
 	global my_newSpecies
-	print "Reacting %s with %s on %s"%(my_newSpecies.name,coreSpecies.name,multiprocessing.current_process().name)
+	logging.verbose("Reacting %s with %s on %s"%(my_newSpecies.label,coreSpecies.label,multiprocessing.current_process().name))
 	if coreSpecies.reactive:
 		return reaction.kineticsDatabase.getReactions([my_newSpecies, coreSpecies])
+	else: return []
 		
 ################################################################################
 
@@ -131,7 +134,6 @@ class CoreEdgeReactionModel:
 		is a :class:`rmg.unirxn.network.Network` object, then reactions are
 		generated for the species in the network with the largest leak flux.
 		"""
-		import multiprocessing
 		rxnList = []
 
 		if isinstance(newObject, species.Species):
@@ -153,15 +155,16 @@ class CoreEdgeReactionModel:
 				import reaction
 				global my_newSpecies
 				my_newSpecies = newspecies
-				print "Setting kineticsDatabase and newSpecies"
+				print "Setting kineticsDatabase and newSpecies in %s"%multiprocessing.current_process().name
 			
 			pool = multiprocessing.Pool(initializer=initializer,initargs=(newSpecies,) )
-#			pool = multiprocessing.Pool()
-			
-			for coreSpecies in self.core.species:
-				r = pool.apply_async(reactwithcorespecies, (coreSpecies), callback=rxnList.extend)
-			
-			
+			outputs = pool.map(reactwithcorespecies, self.core.species)
+			pool.close()
+#			pool.join()
+			for output in outputs:
+				print "This is my output:",output
+				rxnList.extend(output)
+				
 			# Add new species
 			self.addSpeciesToCore(newSpecies)
 
