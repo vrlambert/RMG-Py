@@ -56,6 +56,8 @@ from kinetics import *
 
 import ctml_writer
 
+import multiprocessing
+
 ################################################################################
 
 class Reaction:
@@ -2102,6 +2104,37 @@ global reactionCounter
 #: Used to label reactions uniquely. Incremented each time a new reaction is made.
 reactionCounter = 0 
 
+class matchFound(Exception):
+	"""We've found a matching reaction"""
+	def __init__(self,match):
+		self.match = match
+
+def compareWithNewReaction(rxn):
+	global my_family
+	logging.verbose("Comparing with %d on %s"%(rxn.id,multiprocessing.current_process().name))
+
+	if isinstance(rxn.family, ReactionFamily):
+		if rxn.family.reverse:
+			if rxn.family.label != my_family.label and rxn.family.reverse.label != my_family.label:
+				# rxn is not from seed, and families are different
+				return False
+		else:
+			if rxn.family.label != my_family.label:
+				# rxn is not from seed, and families are different
+				return False
+	if (rxn.reactants == my_reactants and rxn.products == my_products) or \
+		(rxn.reactants == my_products and rxn.products == my_reactants):
+		matchReaction = rxn
+		raise matchFound(matchReaction)
+
+def processInitializer(family,reactants,products):
+	global my_family
+	my_family = family
+	my_reactants = reactants
+	my_products = products
+	print "Setting family, reactants, and products in %s"%multiprocessing.current_process().name
+
+
 def makeNewReaction(reactants, products, reactantStructures, productStructures, family):
 	"""
 	Attempt to make a new reaction based on a list of `reactants` and a list of
@@ -2136,21 +2169,33 @@ def makeNewReaction(reactants, products, reactantStructures, productStructures, 
 		return None, False
 
 	# Check that the reaction is unique
-	matchReaction = None
-	for rxn in reactionList:
-		if isinstance(rxn.family, ReactionFamily):
-			if rxn.family.reverse:
-				if rxn.family.label != family.label and rxn.family.reverse.label != family.label:
-					# rxn is not from seed, and families are different
-					continue
-			else:
-				if rxn.family.label != family.label:
-					# rxn is not from seed, and families are different
-					continue
-		if (rxn.reactants == reactants and rxn.products == products) or \
-			(rxn.reactants == products and rxn.products == reactants):
-			matchReaction = rxn
-			break # found a match so stop checking other rxn
+	pool = multiprocessing.Pool(initializer=processInitializer,initargs=(family,reactants,products) )
+	try:
+		pool.map_async(compareWithNewReaction,reactionList)
+	except matchFound, e:
+		matchReaction = e.match
+		logging.verbose("Found existing reaction %s"%matchReaction)
+	else:
+		matchReaction = None
+	finally:
+		pool.close()
+		results = pool = None
+		
+	#matchReaction = None
+	#for rxn in reactionList:
+	#	if isinstance(rxn.family, ReactionFamily):
+	#		if rxn.family.reverse:
+	#			if rxn.family.label != family.label and rxn.family.reverse.label != family.label:
+	#				# rxn is not from seed, and families are different
+	#				continue
+	#		else:
+	#			if rxn.family.label != family.label:
+	#				# rxn is not from seed, and families are different
+	#				continue
+	#	if (rxn.reactants == reactants and rxn.products == products) or \
+	#		(rxn.reactants == products and rxn.products == reactants):
+	#		matchReaction = rxn
+	#		break # found a match so stop checking other rxn
 	
 	# If a match was found, take an
 	if matchReaction is not None:
