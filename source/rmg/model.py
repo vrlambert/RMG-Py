@@ -42,6 +42,12 @@ import reaction
 import species
 import unirxn.network
 
+def reactwithcorespecies(coreSpecies):
+	global my_newSpecies
+	print "Reacting %s with %s on %s"%(my_newSpecies.name,coreSpecies.name,multiprocessing.current_process().name)
+	if coreSpecies.reactive:
+		return reaction.kineticsDatabase.getReactions([my_newSpecies, coreSpecies])
+		
 ################################################################################
 
 class ReactionModel:
@@ -143,19 +149,18 @@ class CoreEdgeReactionModel:
 			#	if coreSpecies.reactive:
 			#		rxnList.extend(reaction.kineticsDatabase.getReactions([newSpecies, coreSpecies]))
 			
-			def initializer(kindb, newspecies):
-				my_kineticsDatabase = kindb
+			def initializer(newspecies):
+				import reaction
+				global my_newSpecies
 				my_newSpecies = newspecies
 				print "Setting kineticsDatabase and newSpecies"
-			def reactwithcorespecies(coreSpecies):
-				if coreSpecies.reactive:
-					return my_kineticsDatabase.getReactions([my_newSpecies, coreSpecies])
 			
-			pool = multiprocessing.Pool(initializer=initializer,initargs=(reaction.kineticsDatabase,newSpecies) )
+			pool = multiprocessing.Pool(initializer=initializer,initargs=(newSpecies,) )
 #			pool = multiprocessing.Pool()
-			outputs = pool.map(reactwithcorespecies, self.core.species)
-			for output in outputs:
-				rxnList.extend(output)
+			
+			for coreSpecies in self.core.species:
+				r = pool.apply_async(reactwithcorespecies, (coreSpecies), callback=rxnList.extend)
+			
 			
 			# Add new species
 			self.addSpeciesToCore(newSpecies)
