@@ -2164,6 +2164,7 @@ def makeNewReaction(reactants, products, reactantStructures, productStructures, 
 	global my_family, my_reactants, my_products
 	my_family=family; my_reactants=reactants; my_products=products
 	pool = multiprocessing.Pool()
+	#logging.verbose("Checking for existing reactions with pool of %d processes"%multiprocessing.cpu_count() )
 	try:
 		pool.map(compareWithNewReaction,range(len(reactionList)))
 	except matchFound, e:
@@ -2172,8 +2173,9 @@ def makeNewReaction(reactants, products, reactantStructures, productStructures, 
 	else:
 		matchReaction = None
 	finally:
+		#import pdb; pdb.set_trace()
 		pool.close()
-		results = pool = None
+		#pool = None
 	
 	# If a match was found, take an
 	if matchReaction is not None:
