@@ -2109,8 +2109,9 @@ class matchFound(Exception):
 	pass
 
 def compareWithNewReaction(rxnID):
-	global reactionList, my_family, my_reactants, my_products
+	global reactionList, my_family, my_reactants, my_products, matchReaction
 	#logging.verbose("Comparing with %d on %s"%(rxnID,multiprocessing.current_process().name))
+	#print "Comparing with %d on %s"%(rxnID,multiprocessing.current_process().name)
 	rxn = reactionList[rxnID]
 	if isinstance(rxn.family, ReactionFamily):
 		if rxn.family.reverse:
@@ -2124,7 +2125,8 @@ def compareWithNewReaction(rxnID):
 	if (rxn.reactants == my_reactants and rxn.products == my_products) or \
 		(rxn.reactants == my_products and rxn.products == my_reactants):
 		matchReaction = rxn
-		raise matchFound(matchReaction)
+		return matchReaction
+		#raise matchFound(matchReaction)
 
 def makeNewReaction(reactants, products, reactantStructures, productStructures, family):
 	"""
@@ -2163,19 +2165,30 @@ def makeNewReaction(reactants, products, reactantStructures, productStructures, 
 #	pool = multiprocessing.Pool(initializer=processInitializer,initargs=(family,reactants,products) )
 	global my_family, my_reactants, my_products
 	my_family=family; my_reactants=reactants; my_products=products
-	pool = multiprocessing.Pool()
+	
 	#logging.verbose("Checking for existing reactions with pool of %d processes"%multiprocessing.cpu_count() )
-	try:
-		pool.map(compareWithNewReaction,range(len(reactionList)))
-	except matchFound, e:
-		matchReaction = e.args
-		#logging.verbose("Found existing reaction %s"%matchReaction)
-	else:
-		matchReaction = None
-	finally:
-		#import pdb; pdb.set_trace()
-		pool.close()
-		#pool = None
+	pool = multiprocessing.Pool()
+		#pool.map(compareWithNewReaction,range(len(reactionList)))
+	done = False
+	nproc = len(pool._pool)
+	global matchReaction
+	matchReaction=None
+	def callback(match):
+		global matchReaction
+		if match:
+			matchReaction = match
+			#print "FOUND EXISTING REACTION", match.id
+			
+	for i in range(len(reactionList)):
+		result=pool.apply_async(compareWithNewReaction, (i,), callback=callback)
+		if not i%(4*nproc): # every 4*nproc items, wait and check the match
+			result.wait()
+		if matchReaction:
+			#print "FOUND IT WHEN ABOUT TO SPAWN %d of %d"%(i,len(reactionList))
+			break
+	pool.close()
+	pool.join()
+
 	
 	# If a match was found, take an
 	if matchReaction is not None:
