@@ -2106,8 +2106,7 @@ reactionCounter = 0
 
 class matchFound(Exception):
 	"""We've found a matching reaction"""
-	def __init__(self,match):
-		self.match = match
+	pass
 
 def compareWithNewReaction(rxn):
 	global my_family
@@ -2128,7 +2127,7 @@ def compareWithNewReaction(rxn):
 		raise matchFound(matchReaction)
 
 def processInitializer(family,reactants,products):
-	global my_family
+	global my_family, my_reactants, my_products
 	my_family = family
 	my_reactants = reactants
 	my_products = products
@@ -2171,9 +2170,9 @@ def makeNewReaction(reactants, products, reactantStructures, productStructures, 
 	# Check that the reaction is unique
 	pool = multiprocessing.Pool(initializer=processInitializer,initargs=(family,reactants,products) )
 	try:
-		pool.map_async(compareWithNewReaction,reactionList)
+		pool.map(compareWithNewReaction,reactionList)
 	except matchFound, e:
-		matchReaction = e.match
+		matchReaction = e.args
 		logging.verbose("Found existing reaction %s"%matchReaction)
 	else:
 		matchReaction = None
