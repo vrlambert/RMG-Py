@@ -2237,6 +2237,7 @@ def processNewReaction(rxn):
 	reactionList.insert(0, rxn)
 	reactionCounter += 1
 	rxn.id = reactionCounter
+	logging.verbose("NEW rxn %-4d %s"%(rxn.id,rxn))
 
 	# Return newly created reaction
 	return rxn, True
