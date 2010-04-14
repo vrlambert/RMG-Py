@@ -2179,22 +2179,6 @@ def makeNewReaction(reactants, products, reactantStructures, productStructures, 
 	finally:
 		pool.close()
 		results = pool = None
-		
-	#matchReaction = None
-	#for rxn in reactionList:
-	#	if isinstance(rxn.family, ReactionFamily):
-	#		if rxn.family.reverse:
-	#			if rxn.family.label != family.label and rxn.family.reverse.label != family.label:
-	#				# rxn is not from seed, and families are different
-	#				continue
-	#		else:
-	#			if rxn.family.label != family.label:
-	#				# rxn is not from seed, and families are different
-	#				continue
-	#	if (rxn.reactants == reactants and rxn.products == products) or \
-	#		(rxn.reactants == products and rxn.products == reactants):
-	#		matchReaction = rxn
-	#		break # found a match so stop checking other rxn
 	
 	# If a match was found, take an
 	if matchReaction is not None:
