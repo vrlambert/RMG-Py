@@ -2108,10 +2108,10 @@ class matchFound(Exception):
 	"""We've found a matching reaction"""
 	pass
 
-def compareWithNewReaction(rxn):
-	global my_family
-	logging.verbose("Comparing with %d on %s"%(rxn.id,multiprocessing.current_process().name))
-
+def compareWithNewReaction(rxnID):
+	global reactionList, my_family, my_reactants, my_products
+	#logging.verbose("Comparing with %d on %s"%(rxnID,multiprocessing.current_process().name))
+	rxn = reactionList[rxnID]
 	if isinstance(rxn.family, ReactionFamily):
 		if rxn.family.reverse:
 			if rxn.family.label != my_family.label and rxn.family.reverse.label != my_family.label:
@@ -2125,14 +2125,6 @@ def compareWithNewReaction(rxn):
 		(rxn.reactants == my_products and rxn.products == my_reactants):
 		matchReaction = rxn
 		raise matchFound(matchReaction)
-
-def processInitializer(family,reactants,products):
-	global my_family, my_reactants, my_products
-	my_family = family
-	my_reactants = reactants
-	my_products = products
-	print "Setting family, reactants, and products in %s"%multiprocessing.current_process().name
-
 
 def makeNewReaction(reactants, products, reactantStructures, productStructures, family):
 	"""
@@ -2168,12 +2160,15 @@ def makeNewReaction(reactants, products, reactantStructures, productStructures, 
 		return None, False
 
 	# Check that the reaction is unique
-	pool = multiprocessing.Pool(initializer=processInitializer,initargs=(family,reactants,products) )
+#	pool = multiprocessing.Pool(initializer=processInitializer,initargs=(family,reactants,products) )
+	global my_family, my_reactants, my_products
+	my_family=family; my_reactants=reactants; my_products=products
+	pool = multiprocessing.Pool()
 	try:
-		pool.map(compareWithNewReaction,reactionList)
+		pool.map(compareWithNewReaction,range(len(reactionList)))
 	except matchFound, e:
 		matchReaction = e.args
-		logging.verbose("Found existing reaction %s"%matchReaction)
+		#logging.verbose("Found existing reaction %s"%matchReaction)
 	else:
 		matchReaction = None
 	finally:
@@ -2265,7 +2260,7 @@ def processNewReaction(rxn):
 	reactionList.insert(0, rxn)
 	reactionCounter += 1
 	rxn.id = reactionCounter
-	logging.verbose("NEW rxn %-4d %s"%(rxn.id,rxn))
+	#logging.verbose("NEW rxn %-4d %s"%(rxn.id,rxn))
 
 	# Return newly created reaction
 	return rxn, True
