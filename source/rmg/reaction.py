@@ -2106,51 +2106,66 @@ global reactionCounter
 #: Used to label reactions uniquely. Incremented each time a new reaction is made.
 reactionCounter = 0 
 
-
-def compareWithNewReaction(rxn_range, thread_no):
+def compareWithReactions_worker(thread_no):
+	"""Worker function for child threads. Checks my_reaction with all existing reactions"""
 	global reactionList, my_family, my_reactants, my_products, matchReaction
 	global done_locks, threads_started, threads_started_lock
-	# acquire this thread's lock
+	global next_reaction, next_reaction_lock
+	# acquire this thread's "done" lock
 	done_locks[thread_no].acquire()
 	# tell the world that this thread has aquired its lock and started work
 	threads_started_lock.acquire()
 	threads_started+=1
 	threads_started_lock.release()
-	#logging.verbose("Comparing with %d on %s"%(rxnID,multiprocessing.current_process().name))
-	print "Comparing with %s in thread %d (%s)"%(rxn_range,thread_no,thread.get_ident())
-	try:
-		for rxn_number in range(*tuple(rxn_range)):
-			print "Reaction %d OF %d. (counter=%d)"%(rxn_number,len(reactionList), reactionCounter )
-			if rxn_number>=len(reactionList):
-				print "list out of date"
-				return None
-			#print reactionList
-			rxn = reactionList[rxn_number]
-			if isinstance(rxn.family, ReactionFamily):
-				if rxn.family.reverse:
-					if rxn.family.label != my_family.label and rxn.family.reverse.label != my_family.label:
-						# rxn is not from seed, and families are different
-						continue
-				else:
-					if rxn.family.label != my_family.label:
-						# rxn is not from seed, and families are different
-						continue
-			if (rxn.reactants == my_reactants and rxn.products == my_products) or \
-				(rxn.reactants == my_products and rxn.products == my_reactants):
-				matchReaction = rxn
-				print "Found a match in thread %d"%thread_no
-				done_locks[thread_no].release()
-				return 
-			if matchReaction:
-				print "Some other thread found a match"
-				done_locks[thread_no].release()
-				
-	except Exception, e:
-		print "THREW AN EXCEPTION ", e.message
-		raise
+	
+	total_reactions = len(reactionList)
+	
+	while matchReaction is None: # will stop when any thread finds a matchReaction
+		# Choose a reaction and tell the world it's taken.
+		next_reaction_lock.acquire()
+		rxn_number = next_reaction
+		next_reaction += 1
+		next_reaction_lock.release()
+		if rxn_number >= total_reactions:
+			break
+		#print "Comparing with %s in thread %d (%s)"%(rxn_number,thread_no,thread.get_ident())
+		try:
+			if compareWithMyReaction(rxn_number):
+				#print "I found a match in thread %d"%thread_no
+				break
+		except Exception, e:
+			print "Threw an exception in thread %d: "%thread_no, e.message
+			done_locks[thread_no].release()
+			raise
+	#print "Thread %d finished"%thread_no
 	done_locks[thread_no].release()
+		
+def compareWithMyReaction(rxn_number):
+	"""
+	Compare reaction with reactionList[rxn_number].
+	Returns None if no match, or matchReaction if match.
+	Uses global variables.
+	"""
+	global reactionList, my_family, my_reactants, my_products
+	global matchReaction
+	
+	# print "Checking reaction %d of %d."%(rxn_number,len(reactionList) )
+	rxn = reactionList[rxn_number]
+	if isinstance(rxn.family, ReactionFamily):
+		if rxn.family.reverse:
+			if rxn.family.label != my_family.label and rxn.family.reverse.label != my_family.label:
+				# rxn is not from seed, and families are different
+				return None
+		else:
+			if rxn.family.label != my_family.label:
+				# rxn is not from seed, and families are different
+				return None
+	if (rxn.reactants == my_reactants and rxn.products == my_products) or \
+		(rxn.reactants == my_products and rxn.products == my_reactants):
+		matchReaction = rxn
+		#print "Found a matching reaction: %d"%rxn_number
+		return matchReaction
 
-    	
 def makeNewReaction(reactants, products, reactantStructures, productStructures, family):
 	"""
 	Attempt to make a new reaction based on a list of `reactants` and a list of
@@ -2185,51 +2200,37 @@ def makeNewReaction(reactants, products, reactantStructures, productStructures, 
 		return None, False
 
 	# Check that the reaction is unique
-	global my_family, my_reactants, my_products, pool, matchReaction, reactionList
-	global done_locks, threads_started, threads_started_lock
+	global my_family, my_reactants, my_products
+	global matchReaction, reactionList
 	my_family=family; my_reactants=reactants; my_products=products
-
+	
 	# take a punt at the first one
 	if reactionList:
-		matchReaction = None
-		#matchReaction = compareWithNewReaction((0,1,1),0)
+		matchReaction = compareWithMyReaction(0)
 	else: matchReaction = None
-	# only try the rest if that failed
+	# only try the threaded solution if that failed
 	if not matchReaction:
-		#logging.verbose("Checking for existing reactions with pool of %d processes"%multiprocessing.cpu_count() )
-		
-		nproc = 2
-		# set up chunks
-		rxncount=len(reactionList)
-		chunksize, extra = divmod(rxncount, nproc * 4)
-		if extra:
-			chunksize += 1
-		i=0
-		results=[]
-		chunks=[]
-		while i<rxncount:
-			start=i
-			end=min(i+chunksize,rxncount)
-			step=1
-			i=end
-			chunks.append((start,end,step))
-		nthreads = len(chunks)
-		
+		global done_locks, threads_started, threads_started_lock
+		global next_reaction, next_reaction_lock
 		threads_started_lock = thread.allocate_lock()
 		threads_started = 0
 		done_locks = []
-		for i, chunk in enumerate(chunks):
+		next_reaction = 1 # because we have already tried the zeroth
+		next_reaction_lock = thread.allocate_lock()
+		
+		# create "done" locks and threads
+		nthreads = multiprocessing.cpu_count()
+		for thread_no in range(nthreads):
 			done_locks.append(thread.allocate_lock())
-			thread.start_new_thread(compareWithNewReaction, (chunk,i))
+			thread.start_new_thread(compareWithReactions_worker, (thread_no,))
 		# wait for all threads to start
-		while threads_started < nthreads: # pass 
-			print "Waiting for threads to start"
+		while threads_started < nthreads: pass 
 		# wait for all threads to finish
 		for i in range(nthreads):
 			done_locks[i].acquire()
 		
 		if matchReaction:
-			print "FOUND IT!"
+			logging.verbose("Found existing reaction %s"%matchReaction.id)
 		
 	# If a match was found, take an
 	if matchReaction is not None:
