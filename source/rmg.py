@@ -110,6 +110,9 @@ if __name__ == '__main__':
 	parser.add_option('-t', '--walltime',
 					action="store", type="string", dest="wallTime", default="0",
 					help="set the maximum execution time (HH:MM:SS)")
+	parser.add_option('-n', '--nthreads',
+					action="store", type="int", dest="nthreads", default="1",
+					help="number of threads to use (for multicore or multiprocessor machines).")
 
 	# Parse the command-line arguments
 	options, args = parser.parse_args()

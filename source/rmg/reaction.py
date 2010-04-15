@@ -57,7 +57,6 @@ from kinetics import *
 import ctml_writer
 
 import thread
-import multiprocessing
 
 ################################################################################
 
@@ -2219,7 +2218,8 @@ def makeNewReaction(reactants, products, reactantStructures, productStructures, 
 		next_reaction_lock = thread.allocate_lock()
 		
 		# create "done" locks and threads
-		nthreads = multiprocessing.cpu_count()
+		#nthreads = multiprocessing.cpu_count()
+		nthreads = settings.nthreads
 		for thread_no in range(nthreads):
 			done_locks.append(thread.allocate_lock())
 			thread.start_new_thread(compareWithReactions_worker, (thread_no,))

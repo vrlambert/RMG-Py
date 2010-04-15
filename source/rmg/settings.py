@@ -67,3 +67,6 @@ initializationTime = 0.0
 
 #: Maximum time that RMG should run for in seconds
 wallTime = 0
+
+#: Number of threads to use in parallel processing situations
+nthreads = 1

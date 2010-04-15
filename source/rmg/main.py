@@ -65,6 +65,9 @@ def execute(inputFile, options):
 	settings.outputDirectory = options.outputDirectory
 	settings.scratchDirectory = options.scratchDirectory
 	settings.libraryDirectory = options.libraryDirectory
+	
+	# Set number of threads
+	settings.nthreads = options.nthreads
 
 	# Set wall time
 	if options.wallTime == '0': settings.wallTime = 0
