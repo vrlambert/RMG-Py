@@ -2098,6 +2098,7 @@ class UndeterminableKineticsException(ReactionException):
 # The list is stored in reverse of the order in which the reactions are created;
 # when searching the list, it is more likely to match a recently created
 # reaction than an older reaction
+global reactionList
 reactionList = []
 
 global reactionCounter
@@ -2107,23 +2108,36 @@ reactionCounter = 0
 def compareWithNewReaction(rxn_range):
 	global reactionList, my_family, my_reactants, my_products, matchReaction
 	#logging.verbose("Comparing with %d on %s"%(rxnID,multiprocessing.current_process().name))
-	#print "Comparing with %d on %s"%(rxnID,multiprocessing.current_process().name)
-	
-	for rxn_number in range(*tuple(rxn_range)):
-		rxn = reactionList[rxn_number]
-		if isinstance(rxn.family, ReactionFamily):
-			if rxn.family.reverse:
-				if rxn.family.label != my_family.label and rxn.family.reverse.label != my_family.label:
-					# rxn is not from seed, and families are different
-					continue
-			else:
-				if rxn.family.label != my_family.label:
-					# rxn is not from seed, and families are different
-					continue
-		if (rxn.reactants == my_reactants and rxn.products == my_products) or \
-			(rxn.reactants == my_products and rxn.products == my_reactants):
-			matchReaction = rxn
-			return matchReaction
+	print "Comparing with %s on %s"%(rxn_range,multiprocessing.current_process().name)
+	try:
+		for rxn_number in range(*tuple(rxn_range)):
+			print rxn_number,"OF",len(reactionList)
+			rxn = reactionList[rxn_number]
+			if isinstance(rxn.family, ReactionFamily):
+				if rxn.family.reverse:
+					if rxn.family.label != my_family.label and rxn.family.reverse.label != my_family.label:
+						# rxn is not from seed, and families are different
+						continue
+				else:
+					if rxn.family.label != my_family.label:
+						# rxn is not from seed, and families are different
+						continue
+			if (rxn.reactants == my_reactants and rxn.products == my_products) or \
+				(rxn.reactants == my_products and rxn.products == my_reactants):
+				matchReaction = rxn
+				print "Found a MATCH!"
+				return matchReaction
+	except Exception, e:
+		print "THREW AN EXCEPTION ", e.message
+		raise
+
+def callback(match):
+	global matchReaction
+	if match:
+		matchReaction = match
+		print "FOUND EXISTING REACTION", match.id
+
+pool = None
     	
 def makeNewReaction(reactants, products, reactantStructures, productStructures, family):
 	"""
@@ -2159,7 +2173,7 @@ def makeNewReaction(reactants, products, reactantStructures, productStructures, 
 		return None, False
 
 	# Check that the reaction is unique
-	global my_family, my_reactants, my_products
+	global my_family, my_reactants, my_products, pool, matchReaction
 	my_family=family; my_reactants=reactants; my_products=products
 	
 	# take a punt at the first one
@@ -2170,36 +2184,41 @@ def makeNewReaction(reactants, products, reactantStructures, productStructures, 
 	if not matchReaction:
 		
 		#logging.verbose("Checking for existing reactions with pool of %d processes"%multiprocessing.cpu_count() )
-		pool = multiprocessing.Pool()
-		done = False
+		if pool is None:
+			pool = multiprocessing.Pool()
 		nproc = len(pool._pool)
-		global matchReaction
 		matchReaction=None
-		def callback(match):
-			global matchReaction
-			if match:
-				matchReaction = match
-				#print "FOUND EXISTING REACTION", match.id
+		
+		
 		rxncount=len(reactionList)
 		chunksize, extra = divmod(rxncount,  nproc * 4)
 		if extra:
 			chunksize += 1
 		
 		i=0
+		results=[]
 		while i<rxncount:
 			start=i
 			end=min(i+chunksize,rxncount)
 			step=1
 			i=end
-			result=pool.apply_async(compareWithNewReaction, ((start,end,step),), callback=callback)
-			if not i%(nproc*chunksize): # every nproc chunks, wait and check the match
-				result.wait()
+			result = pool.apply_async(compareWithNewReaction, ((start,end,step),), callback=callback)
+			results.append(result)
+			#if not i%(nproc*chunksize): # every nproc chunks, wait and check the match
+			#	result.wait()
 			if matchReaction:
-				#print "FOUND IT WHEN ABOUT TO SPAWN %d of %d"%(i,len(reactionList))
+				print "FOUND IT WHEN ABOUT TO SPAWN %d of %d"%(i,len(reactionList))
 				break
-		pool.close()
-		pool.join()
-	
+		else: # didn't break
+			for result in results:
+				result.wait()
+				print result, result.ready(), result.successful()
+				if result.get():
+					matchReaction = result.get()
+					print "CAUGHT IT AT THE END"
+		#pool.close()
+		#pool.join()
+		
 	# If a match was found, take an
 	if matchReaction is not None:
 		#matchReaction.multiplier += 1.0
