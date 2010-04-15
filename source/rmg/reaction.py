@@ -57,6 +57,9 @@ from kinetics import *
 import ctml_writer
 
 import thread
+# Unfortunately the Global Interpreter Lock in python  means that only 
+# one thread can run at a time and threading does not help you benefit
+# from a multi-core machine. :-(  I guess that ends this branch of history!
 
 ################################################################################
 
