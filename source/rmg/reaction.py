@@ -56,6 +56,7 @@ from kinetics import *
 
 import ctml_writer
 
+import thread
 import multiprocessing
 
 ################################################################################
@@ -2099,19 +2100,31 @@ class UndeterminableKineticsException(ReactionException):
 # when searching the list, it is more likely to match a recently created
 # reaction than an older reaction
 global reactionList
-reactionList = []
+reactionList = list()
 
 global reactionCounter
 #: Used to label reactions uniquely. Incremented each time a new reaction is made.
 reactionCounter = 0 
 
-def compareWithNewReaction(rxn_range):
+
+def compareWithNewReaction(rxn_range, thread_no):
 	global reactionList, my_family, my_reactants, my_products, matchReaction
+	global done_locks, threads_started, threads_started_lock
+	# acquire this thread's lock
+	done_locks[thread_no].acquire()
+	# tell the world that this thread has aquired its lock and started work
+	threads_started_lock.acquire()
+	threads_started+=1
+	threads_started_lock.release()
 	#logging.verbose("Comparing with %d on %s"%(rxnID,multiprocessing.current_process().name))
-	print "Comparing with %s on %s"%(rxn_range,multiprocessing.current_process().name)
+	print "Comparing with %s in thread %d (%s)"%(rxn_range,thread_no,thread.get_ident())
 	try:
 		for rxn_number in range(*tuple(rxn_range)):
-			print rxn_number,"OF",len(reactionList)
+			print "Reaction %d OF %d. (counter=%d)"%(rxn_number,len(reactionList), reactionCounter )
+			if rxn_number>=len(reactionList):
+				print "list out of date"
+				return None
+			#print reactionList
 			rxn = reactionList[rxn_number]
 			if isinstance(rxn.family, ReactionFamily):
 				if rxn.family.reverse:
@@ -2125,19 +2138,18 @@ def compareWithNewReaction(rxn_range):
 			if (rxn.reactants == my_reactants and rxn.products == my_products) or \
 				(rxn.reactants == my_products and rxn.products == my_reactants):
 				matchReaction = rxn
-				print "Found a MATCH!"
-				return matchReaction
+				print "Found a match in thread %d"%thread_no
+				done_locks[thread_no].release()
+				return 
+			if matchReaction:
+				print "Some other thread found a match"
+				done_locks[thread_no].release()
+				
 	except Exception, e:
 		print "THREW AN EXCEPTION ", e.message
 		raise
+	done_locks[thread_no].release()
 
-def callback(match):
-	global matchReaction
-	if match:
-		matchReaction = match
-		print "FOUND EXISTING REACTION", match.id
-
-pool = None
     	
 def makeNewReaction(reactants, products, reactantStructures, productStructures, family):
 	"""
@@ -2173,51 +2185,51 @@ def makeNewReaction(reactants, products, reactantStructures, productStructures, 
 		return None, False
 
 	# Check that the reaction is unique
-	global my_family, my_reactants, my_products, pool, matchReaction
+	global my_family, my_reactants, my_products, pool, matchReaction, reactionList
+	global done_locks, threads_started, threads_started_lock
 	my_family=family; my_reactants=reactants; my_products=products
-	
+
 	# take a punt at the first one
 	if reactionList:
-		matchReaction = compareWithNewReaction((0,1,1))
+		matchReaction = None
+		#matchReaction = compareWithNewReaction((0,1,1),0)
 	else: matchReaction = None
 	# only try the rest if that failed
 	if not matchReaction:
-		
 		#logging.verbose("Checking for existing reactions with pool of %d processes"%multiprocessing.cpu_count() )
-		if pool is None:
-			pool = multiprocessing.Pool()
-		nproc = len(pool._pool)
-		matchReaction=None
 		
-		
+		nproc = 2
+		# set up chunks
 		rxncount=len(reactionList)
-		chunksize, extra = divmod(rxncount,  nproc * 4)
+		chunksize, extra = divmod(rxncount, nproc * 4)
 		if extra:
 			chunksize += 1
-		
 		i=0
 		results=[]
+		chunks=[]
 		while i<rxncount:
 			start=i
 			end=min(i+chunksize,rxncount)
 			step=1
 			i=end
-			result = pool.apply_async(compareWithNewReaction, ((start,end,step),), callback=callback)
-			results.append(result)
-			#if not i%(nproc*chunksize): # every nproc chunks, wait and check the match
-			#	result.wait()
-			if matchReaction:
-				print "FOUND IT WHEN ABOUT TO SPAWN %d of %d"%(i,len(reactionList))
-				break
-		else: # didn't break
-			for result in results:
-				result.wait()
-				print result, result.ready(), result.successful()
-				if result.get():
-					matchReaction = result.get()
-					print "CAUGHT IT AT THE END"
-		#pool.close()
-		#pool.join()
+			chunks.append((start,end,step))
+		nthreads = len(chunks)
+		
+		threads_started_lock = thread.allocate_lock()
+		threads_started = 0
+		done_locks = []
+		for i, chunk in enumerate(chunks):
+			done_locks.append(thread.allocate_lock())
+			thread.start_new_thread(compareWithNewReaction, (chunk,i))
+		# wait for all threads to start
+		while threads_started < nthreads: # pass 
+			print "Waiting for threads to start"
+		# wait for all threads to finish
+		for i in range(nthreads):
+			done_locks[i].acquire()
+		
+		if matchReaction:
+			print "FOUND IT!"
 		
 	# If a match was found, take an
 	if matchReaction is not None:
@@ -2297,8 +2309,8 @@ def processNewReaction(rxn):
 	Once a reaction `rxn` has been created (e.g. via :meth:`makeNewReaction`),
 	this function handles other aspects	of preparing it for RMG.
 	"""
-
 	global reactionCounter
+	global reactionList
 
 	# Add to global list of existing reactions and update counter
 	reactionList.insert(0, rxn)
