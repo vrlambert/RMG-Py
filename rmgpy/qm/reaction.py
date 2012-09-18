@@ -14,6 +14,44 @@ import rdkit
 from rdkit import DistanceGeometry
 from rdkit.Chem.Pharm3D import EmbedLib
 
+class TSGeometry:
+    """
+    Geometry editing, used for quantum calculations.
+    
+    Created from reacting molecules.
+    """
+    
+    def __init__(self, settings, uniqueID, reaction, multiplicity, uniqueIDlong=None):
+        self.settings = settings
+        self.reaction = reaction
+        self.family = reaction.family
+        self.reactants = reaction.reactants
+        self.products = reaction.products
+    
+    def chooseBuild(self):
+        if self.family in ['intra_r_add_endocyclic', 'intra_r_add_exocyclic']:
+            for reactant in self.reactants:
+                if reactant.isCyclic():
+                    buildTS = reactant
+            for product in self.products:
+                if product.isCyclic():
+                    buildTS = product
+        
+        else:
+            buildTS = None
+        
+        return buildTS
+    
+    def generateTSEstimate(self):
+        import ipdb; ipdb.set_trace()
+        buildTS = self.chooseBuild()
+        if buildTS == None:
+            return
+        else:
+            import ipdb; ipdb.set_trace()
+            buildTS.createGeometry()
+
+
 class QMReaction:
     
     file_store_path = 'QMfiles'

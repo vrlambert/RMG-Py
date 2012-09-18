@@ -151,4 +151,16 @@ class QMCalculator():
             raise Exception("Unknown QM software '{0}'".format(self.settings.software))
         return thermo0
     
+    def getKineticData(self, reaction):
+        
+        if self.setting.software == 'mopac':
+            qm_molecule_calculator = rmgpy.qm.mopac.MopacTSPM3(reaction, self.settings)
+            thermo0 = qm_molecule_calculator.generateTSEstimate()
+        elif self.settings.software == 'gaussian':
+            qm_molecule_calculator = rmgpy.qm.gaussian.GaussianTSPM3(reaction, self.settings)
+            thermo0 = qm_molecule_calculator.generateTSEstimate()
+        else:
+            raise Exception("Unknown QM software '{0}'".format(self.settings.software))
+        
+    
         

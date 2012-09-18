@@ -3,10 +3,11 @@ import os
 import openbabel
 import cclib.parser
 import logging
-from subprocess import Popen, PIPE
+from subprocess import Popen
 
 from qmdata import CCLibData
 from molecule import QMMolecule
+from reaction import QMReaction
 
 class Gaussian:
     """
@@ -228,3 +229,201 @@ class GaussianMolPM3(GaussianMol):
         if attempt > self.scriptAttempts:
             attempt -= self.scriptAttempts
         return self.keywords[attempt-1]
+        
+        
+class GaussianReaction(QMReaction, Gaussian):
+    """
+    A base Class for calculations of molecules using Gaussian. 
+    
+    Inherits from both :class:`QMReaction` and :class:`Gaussian`.
+    """
+    def writeInputFile(self, attempt):
+        """
+        Using the :class:`Geometry` object, write the input file
+        for the `attmept`th attempt.
+        """
+    
+        obConversion = openbabel.OBConversion()
+        obConversion.SetInAndOutFormats("mol", "gjf")
+        mol = openbabel.OBMol()
+    
+        obConversion.ReadFile(mol, self.getMolFilePathForCalculation(attempt) )
+    
+        mol.SetTitle(self.geometry.uniqueIDlong)
+        obConversion.SetOptions('k', openbabel.OBConversion.OUTOPTIONS)
+        input_string = obConversion.WriteString(mol)
+        top_keys = self.inputFileKeywords(attempt)
+        with open(self.inputFilePath, 'w') as gaussianFile:
+            gaussianFile.write(top_keys)
+            gaussianFile.write(input_string)
+            gaussianFile.write('\n')
+            if self.usePolar:
+                gaussianFile.write('\n\n\n')
+                gaussianFile.write(polar_keys)
+    
+    def inputFileKeywords(self, attempt):
+        """
+        Return the top keywords.
+        """
+        raise NotImplementedError("Should be defined by subclass, eg. GaussianMolPM3")
+    
+    def generateKineticData(self):
+        """
+        Calculate the QM data and return a QMData object.
+        """
+        import ipdb; ipdb.set_trace()
+        self.generateTSEstimate()
+        import ipdb; ipdb.set_trace()
+        if self.verifyOutputFile():
+            logging.info("Found a successful output file already; using that.")
+        else:
+            success = False
+            for attempt in range(1, self.maxAttempts+1):
+                self.writeInputFile(attempt)
+                success = self.run()
+                if success:
+                    logging.info('Attempt {0} of {1} on species {2} succeeded.'.format(attempt, self.maxAttempts, self.molecule.toAugmentedInChI()))
+                    break
+            else:
+                raise Exception('QM thermo calculation failed for {0}.'.format(self.molecule.toAugmentedInChI()))
+        result = self.parse() # parsed in cclib
+        return result
+
+
+class GaussianReactionPM3(GaussianReaction):
+    #: Keywords that will be added at the top of the qm input file
+    keywords = [
+               "# pm3 opt=(verytight,gdiis) freq IOP(2/16=3)",
+               "# pm3 opt=(verytight,gdiis) freq IOP(2/16=3) IOP(4/21=2)",
+               "# pm3 opt=(verytight,calcfc,maxcyc=200) freq IOP(2/16=3) nosymm" ,
+               "# pm3 opt=(verytight,calcfc,maxcyc=200) freq=numerical IOP(2/16=3) nosymm",
+               "# pm3 opt=(verytight,gdiis,small) freq IOP(2/16=3)",
+               "# pm3 opt=(verytight,nolinear,calcfc,small) freq IOP(2/16=3)",
+               "# pm3 opt=(verytight,gdiis,maxcyc=200) freq=numerical IOP(2/16=3)",
+               "# pm3 opt=tight freq IOP(2/16=3)",
+               "# pm3 opt=tight freq=numerical IOP(2/16=3)",
+               "# pm3 opt=(tight,nolinear,calcfc,small,maxcyc=200) freq IOP(2/16=3)",
+               "# pm3 opt freq IOP(2/16=3)",
+               "# pm3 opt=(verytight,gdiis) freq=numerical IOP(2/16=3) IOP(4/21=200)",
+               "# pm3 opt=(calcfc,verytight,newton,notrustupdate,small,maxcyc=100,maxstep=100) freq=(numerical,step=10) IOP(2/16=3) nosymm",
+               "# pm3 opt=(tight,gdiis,small,maxcyc=200,maxstep=100) freq=numerical IOP(2/16=3) nosymm",
+               "# pm3 opt=(tight,gdiis,small,maxcyc=200,maxstep=100) freq=numerical IOP(2/16=3) nosymm",
+               "# pm3 opt=(verytight,gdiis,calcall,small,maxcyc=200) IOP(2/16=3) IOP(4/21=2) nosymm",
+               "# pm3 opt=(verytight,gdiis,calcall,small) IOP(2/16=3) nosymm",
+               "# pm3 opt=(calcall,small,maxcyc=100) IOP(2/16=3)",
+               ]
+    
+    @property
+    def scriptAttempts(self):
+        "The number of attempts with different script keywords"
+        return len(self.keywords)
+    
+    @property
+    def maxAttempts(self):
+        "The total number of attempts to try"
+        return 2 * len(self.keywords)
+    
+    def inputFileKeywords(self, attempt):
+        """
+        Return the top keywords for attempt number `attempt`.
+    
+        NB. `attempt`s begin at 1, not 0.
+        """
+        assert attempt <= self.maxAttempts
+        if attempt > self.scriptAttempts:
+            attempt -= self.scriptAttempts
+        return self.keywords[attempt-1]    
+
+# class GaussianTS(QMReaction, Gaussian):
+#     #*****change this stuff for TS
+#     "Keywords for the multiplicity"
+#     multiplicityKeywords = {}
+#     multiplicityKeywords[1] = ''
+#     multiplicityKeywords[2] = 'uhf doublet'
+#     multiplicityKeywords[3] = 'uhf triplet'
+#     multiplicityKeywords[4] = 'uhf quartet'
+#     multiplicityKeywords[5] = 'uhf quintet'
+#     multiplicityKeywords[6] = 'uhf sextet'
+#     multiplicityKeywords[7] = 'uhf septet'
+#     multiplicityKeywords[8] = 'uhf octet'
+#     multiplicityKeywords[9] = 'uhf nonet'
+# 
+#     "Keywords that will be added at the top of the qm input file"
+#     keywordsTop = {}
+#     keywordsTop[1] = "ts"
+#     keywordsTop[2] = "ts recalc=5"
+#     keywordsTop[3] = "ts ddmin=0.0001"
+#     keywordsTop[4] = "ts recalc=5 ddmin=0.0001"
+# 
+#     "Keywords that will be added at the bottom of the qm input file"
+#     keywordsBottom = {}
+#     keywordsBottom[1] = "oldgeo force vectors esp"
+#     keywordsBottom[2] = "oldgeo force vectors esp"
+#     keywordsBottom[3] = "oldgeo force vectors esp"
+#     keywordsBottom[4] = "oldgeo force vectors esp"
+# 
+#     scriptAttempts = len(keywordsTop)
+# 
+#     failureKeys = ['GRADIENT IS TOO LARGE', 
+#                 'EXCESS NUMBER OF OPTIMIZATION CYCLES', 
+#                 'NOT ENOUGH TIME FOR ANOTHER CYCLE',
+#                 '6 IMAGINARY FREQUENCIES',
+#                 '5 IMAGINARY FREQUENCIES',
+#                 '4 IMAGINARY FREQUENCIES',
+#                 '3 IMAGINARY FREQUENCIES',
+#                 '2 IMAGINARY FREQUENCIES'
+#                 ]
+# 
+#     def __init__(self, reaction):
+#         self.reaction = reaction
+#         self.reactants = reaction.reactants
+#         self.products = reaction.products
+#         self.family = reaction.family
+#         self.rdmol = None
+# 
+#     def generateTransitionState(self):
+#         """
+#         make TS geometry
+#         """
+#         if not os.path.exists(self.reaction.family.name):
+#             logging.info("Creating directory %s for mol files."%os.path.abspath(self.reaction.family.name))
+#             os.makedirs(self.reaction.family.name)
+#         inputFilePath = os.path.join(self.reaction.family.name, self.reactants[0].toAugmentedInChIKey())
+#         if os.path.exists(inputFilePath):
+#             inputFilePath = os.path.join(self.reaction.family.name, self.products[0].toAugmentedInChIKey())
+#             if os.path.exists(inputFilePath):
+#                 inputFilePath = os.path.join(self.reaction.family.name, self.reactants[0].toAugmentedInChIKey() + self.products[0].toAugmentedInChIKey())
+#         with open(inputFilePath, 'w') as mopacFile:
+#             for reactant in self.reactants:
+#                 mopacFile.write(reactant.toSMILES())
+#                 mopacFile.write('\n')
+#                 mopacFile.write(reactant.toAdjacencyList())
+#                 mopacFile.write('\n')
+#             for product in self.products:
+#                 mopacFile.write(product.toSMILES())
+#                 mopacFile.write('\n')
+#                 mopacFile.write(product.toAdjacencyList())
+#                 mopacFile.write('\n')
+# 
+# 
+# class GaussianTSPM3(GaussianTS):
+#     def inputFileKeys(self, attempt, multiplicity):
+#         """
+#         Inherits the writeInputFile methods from mopac.py
+#         """
+#         multiplicity_keys = self.multiplicityKeywords[multiplicity]
+# 
+#         top_keys = "pm3 {0} {1}".format(
+#                 multiplicity_keys,
+#                 self.keywordsTop[attempt],
+#                 )
+#         bottom_keys = "{0} pm3 {1}".format(
+#                 self.keywordsBottom[attempt],
+#                 multiplicity_keys,
+#                 )
+#         polar_keys = "oldgeo {0} nosym precise pm3 {1}".format(
+#                 'polar' if multiplicity == 1 else 'static',
+#                 multiplicity_keys,
+#                 )
+# 
+#         return top_keys, bottom_keys, polar_keys
