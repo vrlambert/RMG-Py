@@ -57,7 +57,7 @@ from pdep import PDepNetwork
 
 class RMG:
     """
-    A representation of a Reaction Mechanism Generator (RMG) job. The 
+    A representation of a Reaction Mechanism Generator (RMG) job. The
     attributes are:
     
     =========================== ================================================
@@ -204,14 +204,14 @@ class RMG:
         * self.kineticsFamilies
         * self.kineticsDepositories
          
-        If `self.kineticsEstimator == 'rate rules'` then the training set values are 
+        If `self.kineticsEstimator == 'rate rules'` then the training set values are
         added and the blanks are filled in by averaging.
         
         If self.outputDirectory contains :file:`database.pkl` and :file:`database.hash` files then
-        these are checked for validity and used as a cache. Once loaded (and averages filled 
+        these are checked for validity and used as a cache. Once loaded (and averages filled
         in if necessary) then a cache (pickle and hash) is saved.
         """
-        import inspect, hashlib, cPickle, rmgpy.utilities, scoop.shared
+        import inspect, hashlib, cPickle, rmgpy.utilities
         
         # Make a hash of everything that could alter the contents of the database once it is fully loaded.
         # Then we can compare this hash to the cached file to see if the cache is valid.
@@ -231,7 +231,7 @@ class RMG:
         database_hash = hashlib.sha1(cPickle.dumps(database_metadata)).hexdigest()
         cache_hash_file = os.path.join(self.outputDirectory,'database.hash')
         cache_pickle_file = os.path.join(self.outputDirectory,'database.pkl')
-        scoop.shared.setConst(databaseFile=cache_pickle_file, databaseHash=database_hash)
+
         if not os.path.exists(cache_pickle_file):
             logging.info("Couldn't find a database cache file {0!r} so will reload from source.".format(cache_pickle_file))
         elif not os.path.exists(cache_hash_file):
@@ -303,7 +303,7 @@ class RMG:
         # Read input file
         self.loadInput(args.file[0])
         
-        # Check input file 
+        # Check input file
         self.checkInput()
     
         # See if memory profiling package is available
@@ -332,7 +332,7 @@ class RMG:
         self.loadDatabase()
     
         # Set wall time
-        if args.walltime == '0': 
+        if args.walltime == '0':
             self.wallTime = 0
         else:
             data = args.walltime[0].split(':')
@@ -649,7 +649,7 @@ class RMG:
                 for label, database in self.database.kinetics.families.iteritems():
                     if database.label == family0.label:
                         family = database
-                        break    
+                        break
             else:
                 import pdb; pdb.set_trace()
             if family is None:
@@ -686,7 +686,7 @@ class RMG:
     def saveChemkinFile(self):
         """
         Save the current reaction model to a Chemkin file.
-        """        
+        """
         logging.info('Saving current model to Chemkin file...')
         this_chemkin_path = os.path.join(self.outputDirectory, 'chemkin', 'chem%04i.inp' % len(self.reactionModel.core.species))
         latest_chemkin_path = os.path.join(self.outputDirectory, 'chemkin','chem.inp')
@@ -971,7 +971,7 @@ class RMG:
         assert len(Tlist) > 0
         assert len(Plist) > 0
         concentrationList = numpy.array(concentrationList)
-        assert concentrationList.shape[1] == 1 or concentrationList.shape[1] == len(Tlist) * len(Plist) 
+        assert concentrationList.shape[1] == 1 or concentrationList.shape[1] == len(Tlist) * len(Plist)
         
         # Make a reaction system for each (T,P) combination
         systemCounter = 0
