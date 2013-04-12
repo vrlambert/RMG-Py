@@ -36,9 +36,7 @@ import logging
 import math
 import numpy
 import os.path
-
-import scoop
-from scoop import futures
+import multiprocessing
 
 from rmgpy.display import display
 
@@ -56,23 +54,19 @@ import rmgpy.data.rmg
 
 from pdep import PDepReaction, PDepNetwork, PressureDependenceError
 
-__database = None
 
+__pool = None
+
+def initializer(database):
+    global __database
+    __database = database
+    print "Setting global database in {0}".format(multiprocessing.current_process().name)
 def makeThermoForSpecies(spec):
     """
     Make thermo for a species.
     """
     global __database
-    if __database == None:
-        """Load the database from some pickle file"""
-        import cPickle, logging
-        filename = scoop.shared.getConst('databaseFile')
-        database_hash = scoop.shared.getConst('databaseHash')
-        logging.info('Loading database pickle file from {0!r} on worker {1}'.format(filename, scoop.WORKER_NAME.decode() ))
-        f = open(filename, 'rb')
-        __database = cPickle.load(f)
-        f.close()
-        assert __database.hash == database_hash, "Database loaded from {0!r} doesn't match expected hash!".format(filename)
+    #logging.info("Generating thermo for {0} on {1}".format(spec.label,multiprocessing.current_process().name))
     spec.generateThermoData(__database)
     return spec.thermo
 
@@ -686,10 +680,16 @@ class CoreEdgeReactionModel:
         
         Results are stored in the species objects themselves.
         """
-        # this works without scoop:
+        # this works without multiprocessing:
         #outputs = map(makeThermoForSpecies, listOfSpecies)
-        # this tried so do it via scoop's map:
-        outputs = futures.map(makeThermoForSpecies, listOfSpecies)
+
+        # Set up pool of worker processes (number depends on number of cores)
+        # and set each with the database
+        global __pool
+        if __pool is None:
+            database = rmgpy.data.rmg.database
+            __pool = multiprocessing.Pool(initializer=initializer,initargs=(database,))
+        outputs = __pool.map(makeThermoForSpecies, listOfSpecies)
         for spec, thermo in zip(listOfSpecies, outputs):
             spec.thermo = thermo
 
