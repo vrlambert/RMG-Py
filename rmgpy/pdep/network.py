@@ -36,6 +36,8 @@ pressure-dependent unimolecular reaction network
 import math
 import numpy
 import logging
+import itertools
+import multiprocessing
 
 import rmgpy.constants as constants
 from rmgpy.reaction import Reaction
@@ -50,6 +52,80 @@ class InvalidMicrocanonicalRateError(NetworkError):
     pass
 
 ################################################################################
+
+_network = None
+_method = None
+_errorCheck = True
+
+def _poolInitializer(network,method,errorCheck):
+    global _network
+    global _method
+    global _errorCheck
+    _network = network
+    _method = method
+    _errorCheck = errorCheck
+    # print "Storing network and method in process {0}".format(multiprocessing.current_process().name)
+            
+def getKforConditions(conditions):
+        "get the array of rate coefficients for the given (T,P)"
+        global _network; self = _network # pretend we're inside the Network object, to avoid rewriting code that has "self." all over it.
+        global _method; method = _method
+        global _errorCheck; errorCheck = _errorCheck
+        (T,P) = conditions
+        
+        Nisom = len(self.isomers)
+        Nreac = len(self.reactants)
+        Nprod = len(self.products)
+        
+        self.setConditions(T, P)
+        
+        # Apply method
+        if method.lower() == 'modified strong collision':
+            self.applyModifiedStrongCollisionMethod()
+        elif method.lower() == 'reservoir state':
+            self.applyReservoirStateMethod()
+        elif method.lower() == 'chemically-significant eigenvalues':
+            self.applyChemicallySignificantEigenvaluesMethod()
+        else:
+            raise NetworkError('Unknown method "{0}".'.format(method))
+
+        # Check that the k(T,P) values satisfy macroscopic equilibrium
+        eqRatios = self.eqRatios
+        for i in range(Nisom+Nreac):
+            for j in range(i):
+                Keq0 = self.K[j,i] / self.K[i,j]
+                Keq = eqRatios[j] / eqRatios[i]
+                if Keq0 / Keq < 0.5 or Keq0 / Keq > 2.0:
+                    if i < Nisom:
+                        reactants = self.isomers[i]
+                    elif i < Nisom+Nreac:
+                        reactants = self.reactants[i-Nisom]
+                    else:
+                        reactants = self.products[i-Nisom-Nreac]
+                    if j < Nisom:
+                        products = self.isomers[j]
+                    elif j < Nisom+Nreac:
+                        products = self.reactants[j-Nisom]
+                    else:
+                        products = self.products[j-Nisom-Nreac]
+                    reaction = Reaction(reactants=reactants.species[:], products=products.species[:])
+                    logging.error('For net reaction {0!s}:'.format(reaction))
+                    logging.error('Expected Keq({1:g} K, {2:g} bar) = {0:11.3e}'.format(Keq, T, P*1e-5))
+                    logging.error('  Actual Keq({1:g} K, {2:g} bar) = {0:11.3e}'.format(Keq0, T, P*1e-5))
+                    raise NetworkError('Computed k(T,P) values for reaction {0!s} do not satisfy macroscopic equilibrium.'.format(reaction))
+                    
+        # Reject if any rate coefficients are negative
+        if errorCheck:
+            negativeRate = False
+            for i in range(Nisom+Nreac+Nprod):
+                for j in range(i):
+                    if (self.K[i,j] < 0 or self.K[j,i] < 0) and not negativeRate:
+                        negativeRate = True
+                        logging.error('Negative rate coefficient generated; rejecting result.')
+                        logging.info(self.K[0:Nisom+Nreac+Nprod,0:Nisom+Nreac])
+                        #K[t,p,:,:] = 0 * K[t,p,:,:]
+                        self.K = 0 * self.K
+        return self.K
 
 class Network:
     """
@@ -194,60 +270,15 @@ class Network:
         
         logging.info('Calculating phenomenological rate coefficients for {0}...'.format(self))
         K = numpy.zeros((len(Tlist),len(Plist),Nisom+Nreac+Nprod,Nisom+Nreac+Nprod), numpy.float64)
-        
-        for t, T in enumerate(Tlist):
-            for p, P in enumerate(Plist):
-                self.setConditions(T, P)
-                
-                # Apply method
-                if method.lower() == 'modified strong collision':
-                    self.applyModifiedStrongCollisionMethod()
-                elif method.lower() == 'reservoir state':
-                    self.applyReservoirStateMethod()
-                elif method.lower() == 'chemically-significant eigenvalues':
-                    self.applyChemicallySignificantEigenvaluesMethod()
-                else:
-                    raise NetworkError('Unknown method "{0}".'.format(method))
 
-                K[t,p,:,:] = self.K
-                
-                # Check that the k(T,P) values satisfy macroscopic equilibrium
-                eqRatios = self.eqRatios
-                for i in range(Nisom+Nreac):
-                    for j in range(i):
-                        Keq0 = K[t,p,j,i] / K[t,p,i,j]
-                        Keq = eqRatios[j] / eqRatios[i]
-                        if Keq0 / Keq < 0.5 or Keq0 / Keq > 2.0:
-                            if i < Nisom:
-                                reactants = self.isomers[i]
-                            elif i < Nisom+Nreac:
-                                reactants = self.reactants[i-Nisom]
-                            else:
-                                reactants = self.products[i-Nisom-Nreac]
-                            if j < Nisom:
-                                products = self.isomers[j]
-                            elif j < Nisom+Nreac:
-                                products = self.reactants[j-Nisom]
-                            else:
-                                products = self.products[j-Nisom-Nreac]
-                            reaction = Reaction(reactants=reactants.species[:], products=products.species[:])
-                            logging.error('For net reaction {0!s}:'.format(reaction))
-                            logging.error('Expected Keq({1:g} K, {2:g} bar) = {0:11.3e}'.format(Keq, T, P*1e-5))
-                            logging.error('  Actual Keq({1:g} K, {2:g} bar) = {0:11.3e}'.format(Keq0, T, P*1e-5))
-                            raise NetworkError('Computed k(T,P) values for reaction {0!s} do not satisfy macroscopic equilibrium.'.format(reaction))
-                            
-                # Reject if any rate coefficients are negative
-                if errorCheck:
-                    negativeRate = False
-                    for i in range(Nisom+Nreac+Nprod):
-                        for j in range(i):
-                            if (K[t,p,i,j] < 0 or K[t,p,j,i] < 0) and not negativeRate:
-                                negativeRate = True
-                                logging.error('Negative rate coefficient generated; rejecting result.')
-                                logging.info(K[t,p,0:Nisom+Nreac+Nprod,0:Nisom+Nreac])
-                                K[t,p,:,:] = 0 * K[t,p,:,:]
-                                self.K = 0 * self.K
-
+        logging.info('Making a pool of workers')
+        my_pool = multiprocessing.Pool(initializer=_poolInitializer,initargs=(self,method,errorCheck))
+        answers = my_pool.imap(getKforConditions, itertools.product(Tlist,Plist), chunksize=8) # no idea what chunk size is best
+        indices  = itertools.product(xrange(len(Tlist)),xrange(len(Plist)))
+        for (t,p), answer in zip(indices, answers):
+            K[t,p,:,:] = answer
+        my_pool.close()
+        my_pool.join() # doubt this is necessary
         return K
 
     def setConditions(self, T, P, ymB=None):
