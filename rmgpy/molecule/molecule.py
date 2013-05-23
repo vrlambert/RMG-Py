@@ -460,7 +460,7 @@ class Bond(Edge):
 ################################################################################
 SMILEwriter = openbabel.OBConversion()
 SMILEwriter.SetOutFormat('smi')
-SMILEwriter.SetOptions("i",SMILEwriter.OUTOPTIONS) # turn off isomer and stereochemistry information (the @ signs!)
+SMILEwriter.SetOptions("ic",SMILEwriter.OUTOPTIONS) # turn off isomer and stereochemistry information (the @ signs!), and make canonical (a bit slower, but prettier)
     
 class Molecule(Graph):
     """
