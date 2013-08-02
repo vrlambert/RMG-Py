@@ -545,7 +545,6 @@ class ModelMatcher():
              'CH': '[CH]',
              'Ar': '[Ar]',
              'He': '[He]',
-             'C2H2': 'C#C',
              'H': '[H]',
              }
         identified_labels = []
