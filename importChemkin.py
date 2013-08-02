@@ -214,9 +214,10 @@ class ModelMatcher():
                     # Unread the line (we'll re-read it in readThermoBlock())
                     f.seek(-len(line0), 1)
                     formulaDict = readThermoBlock(f, speciesDict)
-                    assert formulaDict, "Didn't read any thermo data"
+                    
                 line0 = f.readline()
-
+        assert formulaDict, "Didn't read any thermo data"
+        
         # Save the formulaDict, converting from {'c':1,'h':4} into "CH4" in the process.
         self.formulaDict = {label: convertFormula(formula) for label, formula in formulaDict.iteritems()}
 
