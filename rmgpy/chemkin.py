@@ -82,7 +82,12 @@ def readThermoEntry(entry, Tmin=0, Tint=0, Tmax=0):
     for i in range(24,40,5):
         element,count = lines[0][i:i+2].strip(), lines[0][i+2:i+5].strip()
         if element:
-            formula[element]=int(count)
+            try:
+                formula[element]=int(count)
+            except ValueError:
+                # Chemkin allows float values for the number of atoms, so try this next.
+                formula[element]=int(float(count))
+            
     phase = lines[0][44]
     if phase.upper() != 'G':
         logging.warning("Was expecting gas phase thermo data for {0}. Skipping thermo data.".format(species))
@@ -744,30 +749,28 @@ def loadChemkinFile(path, dictionaryPath=None, transportPath=None, readComments 
             reaction2 = reactionList[index2]
             if reaction1.reactants == reaction2.reactants and reaction1.products == reaction2.products:
                 if reaction1.duplicate and reaction2.duplicate:
-
-                    for reaction in duplicateReactionsToAdd:
-                        if reaction1.reactants == reaction.reactants and reaction1.products == reaction.products:
-                            break
                     
                     if isinstance(reaction1, LibraryReaction) and isinstance(reaction2, LibraryReaction):
                         assert reaction1.library.label == reaction2.library.label
-                        if isinstance(reaction1.kinetics, PDepArrhenius):
-                            kinetics = MultiPDepArrhenius()
-                        elif isinstance(reaction1.kinetics, Arrhenius):
-                            kinetics = MultiArrhenius()
-                        else:
-                            raise ChemkinError('Unexpected kinetics type {0} for duplicate reaction {1}.'.format(reaction1.kinetics.__class__, reaction1))
-                        reaction = LibraryReaction(
-                            index = reaction1.index,
-                            reactants = reaction1.reactants,
-                            products = reaction1.products,
-                            kinetics = kinetics,
-                            library = reaction1.library,
-                            duplicate = False,
-                        )
-                        duplicateReactionsToAdd.append(reaction)
-                        kinetics.arrhenius = [reaction1.kinetics]
-                        duplicateReactionsToRemove.append(reaction1)
+                        if reaction1 not in duplicateReactionsToRemove:
+                            # already created duplicate reaction, move on to appending any additional duplicate kinetics
+                            if isinstance(reaction1.kinetics, PDepArrhenius):
+                                kinetics = MultiPDepArrhenius()
+                            elif isinstance(reaction1.kinetics, Arrhenius):
+                                kinetics = MultiArrhenius()
+                            else:
+                                raise ChemkinError('Unexpected kinetics type {0} for duplicate reaction {1}.'.format(reaction1.kinetics.__class__, reaction1))
+                            reaction = LibraryReaction(
+                                index = reaction1.index,
+                                reactants = reaction1.reactants,
+                                products = reaction1.products,
+                                kinetics = kinetics,
+                                library = reaction1.library,
+                                duplicate = False,
+                            )
+                            duplicateReactionsToAdd.append(reaction)
+                            kinetics.arrhenius = [reaction1.kinetics]
+                            duplicateReactionsToRemove.append(reaction1)
 
                     else:
                         # Do not use as duplicate reactions if it's not a library reaction
@@ -1618,3 +1621,5 @@ def saveJavaKineticsLibrary(path, species, reactions):
             f.write('\n')
     f.close()
     f2.close()
+    
+    saveSpeciesDictionary(os.path.join(os.path.dirname(path), 'species.txt'), species)

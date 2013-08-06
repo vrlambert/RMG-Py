@@ -99,6 +99,7 @@ class RMG:
     `generatePlots`             ``True`` to generate plots of the job execution statistics after each iteration, ``False`` otherwise
     `verboseComments`           ``True`` to keep the verbose comments for database estimates, ``False`` otherwise
     `pressureDependence`        Whether to process unimolecular (pressure-dependent) reaction networks
+    `quantumMechanics`          Whether to apply quantum mechanical calculations instead of group additivity to certain molecular types.
     `wallTime`                  The maximum amount of CPU time in seconds to expend on this job; used to stop gracefully so we can still get profiling information
     --------------------------- ------------------------------------------------
     `initializationTime`        The time at which the job was initiated, in seconds since the epoch (i.e. from time.time())
@@ -149,6 +150,7 @@ class RMG:
         self.saveConcentrationProfiles = None
         self.verboseComments = None
         self.pressureDependence = None
+        self.quantumMechanics = None
         self.reactionGenerationOptions = {}
         self.wallTime = 0
         self.initializationTime = 0
@@ -171,6 +173,10 @@ class RMG:
             self.reactionModel.pressureDependence = self.pressureDependence
         self.reactionModel.reactionGenerationOptions = self.reactionGenerationOptions
         self.reactionModel.verboseComments = self.verboseComments
+        
+        if self.quantumMechanics:
+            self.quantumMechanics.setDefaultOutputDirectory(self.outputDirectory)
+            self.reactionModel.quantumMechanics = self.quantumMechanics
         
     def checkInput(self):
         """
@@ -259,6 +265,10 @@ class RMG:
         self.makeOutputSubdirectory('chemkin')
         self.makeOutputSubdirectory('solver')
         
+        # Do any necessary quantum mechanics startup
+        if self.quantumMechanics:
+            self.quantumMechanics.initialize()
+
         # Load databases
         self.loadDatabase()
     
@@ -303,6 +313,7 @@ class RMG:
             # Then add remaining reactive species
             for spec in self.initialSpecies:
                 spec.generateThermoData(self.database)
+                    
             self.reactionModel.enlarge([spec for spec in self.initialSpecies if spec.reactive])
             
             # Save a restart file if desired
@@ -931,21 +942,17 @@ class RMG:
         assert len(Tlist) > 0
         assert len(Plist) > 0
         concentrationList = numpy.array(concentrationList)
-        assert concentrationList.shape[1] == 1 or concentrationList.shape[1] == len(Tlist) * len(Plist) 
+        assert concentrationList.shape[1] > 0  # An arbitrary number of concentrations is acceptable, and should be run for each reactor system 
         
         # Make a reaction system for each (T,P) combination
-        systemCounter = 0
         for T in Tlist:
             for P in Plist:
-                if concentrationList.shape[1] == 1:
-                    concentrations = concentrationList[:,0]
-                else:
-                    concentrations = concentrationList[:,systemCounter]
-                totalConc = numpy.sum(concentrations)
-                initialMoleFractions = dict([(self.initialSpecies[i], concentrations[i] / totalConc) for i in range(len(self.initialSpecies))])
-                reactionSystem = SimpleReactor(T, P, initialMoleFractions=initialMoleFractions, termination=termination)
-                self.reactionSystems.append(reactionSystem)
-                systemCounter += 1
+                for i in range(concentrationList.shape[1]):
+                    concentrations = concentrationList[:,i]
+                    totalConc = numpy.sum(concentrations)
+                    initialMoleFractions = dict([(self.initialSpecies[i], concentrations[i] / totalConc) for i in range(len(self.initialSpecies))])
+                    reactionSystem = SimpleReactor(T, P, initialMoleFractions=initialMoleFractions, termination=termination)
+                    self.reactionSystems.append(reactionSystem)
     
     def readMeaningfulLineJava(self, f):
         """
