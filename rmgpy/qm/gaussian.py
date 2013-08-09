@@ -102,10 +102,10 @@ class Gaussian:
                         logging.info("InChI too long to check, but beginning matches so assuming OK.")
                         InChIMatch = True
                     else:
-                        logging.info("InChI in log file didn't match that in geometry.")
-                        logging.info(self.geometry.uniqueIDlong)
-                        logging.info(logFileInChI)
-        
+                        logging.warning("InChI in log file ({0}) didn't match that in geometry ({1}).".format(logFileInChI, self.geometry.uniqueIDlong))                    
+                        if self.geometry.uniqueIDlong.startswith(logFileInChI):
+                            logging.warning("but the beginning matches so it's probably just a truncation problem.")
+                            InChIMatch = True
         # Check that ALL 'success' keywords were found in the file.
         if not all( successKeysFound.values() ):
             logging.error('Not all of the required keywords for sucess were found in the output file!')
@@ -200,7 +200,8 @@ class GaussianMol(QMMolecule, Gaussian):
                     logging.info('Attempt {0} of {1} on species {2} succeeded.'.format(attempt, self.maxAttempts, self.molecule.toAugmentedInChI()))
                     break
             else:
-                raise Exception('QM thermo calculation failed for {0}.'.format(self.molecule.toAugmentedInChI()))
+                logging.error('QM thermo calculation failed for {0}.'.format(self.molecule.toAugmentedInChI()))
+                return None
         result = self.parse() # parsed in cclib
         return result
     

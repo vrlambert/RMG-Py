@@ -391,9 +391,13 @@ def readKineticsEntry(entry, speciesDict, Aunits, Eunits):
                             error_msg = "{0!r} doesn't look like a collision efficiency for species {1} in line {2!r}".format(efficiency,collider.strip(),line)
                             logging.error(error_msg)
                             raise ChemkinError(error_msg)
-                        efficiencies[speciesDict[collider.strip()].molecule[0]] = efficiency
+                        if collider.strip() in speciesDict:
+                            efficiencies[speciesDict[collider.strip()].molecule[0]] = efficiency
+                        else:
+                            efficiencies[speciesDict[collider.strip().upper()].molecule[0]] = efficiency
                 except IndexError:
                     error_msg = 'Could not read collider efficiencies for reaction: {0}.\n'.format(reaction)
+                    error_msg += 'Collider "{0}" is not in known species dictionary.\n'.format(collider)
                     error_msg += 'The following line was parsed incorrectly:\n{0}'.format(line)
                     error_msg += "\n(Case-preserved tokens: {0!r} )".format(case_preserved_tokens)
                     raise ChemkinError(error_msg)
