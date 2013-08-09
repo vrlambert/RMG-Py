@@ -1344,6 +1344,7 @@ function alsoUpdate(json) {
  // replace this with another <script> block on a specific page if you want it to do something
  }
 var lastAlert = 5;
+var progressUpdates = 0;
 function updateStats() {
     $.getJSON( "progress.json", function( json ) {
             var total = json.total;
@@ -1353,11 +1354,12 @@ function updateStats() {
             $('#tentative').html(json.unprocessed+json.processed+json.tentative).width(100*json.tentative/total+'%');
             $('#unidentified').html(total).width(100*json.unidentified/total+'%');
             alsoUpdate(json); // any other update scripts for specific pages
-            if ((json.processed>lastAlert) && (json.unprocessed==0)) {
+            if ((json.processed>lastAlert) && (json.unprocessed==0) && (progressUpdates > 0)) {
                 alert("Input needed! Please confirm a match.");
                 lastAlert = json.processed;
             }
             repeater = setTimeout(updateStats, 10000); // do again in 10 seconds
+            progressUpdates++;
         }).fail(function( jqxhr, textStatus, error ) {
               var err = textStatus + ', ' + error;
               console.log( "Request Failed: " + err);
