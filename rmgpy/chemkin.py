@@ -929,9 +929,7 @@ def readThermoBlock(f, speciesDict):
                     try:
                         formulaDict[label] = formula
                         speciesDict[label].thermo = thermo
-                        speciesDict[label].thermo.comment = getattr(speciesDict[label].thermo,'comment','') 
-                        if comments:
-                            speciesDict[label].thermo.comment += '\n{0}'.format(comments)
+                        speciesDict[label].thermo.comment = getattr(speciesDict[label].thermo,'comment') + comments.strip()
                         comments = ''
                     except KeyError:
                         if label.upper() in ['AR', 'N2', 'HE', 'NE']:
@@ -1220,9 +1218,8 @@ def writeThermoEntry(species, verbose = True):
     # Write thermo comments
     if verbose:
         if thermo.comment:
-            string += '! Thermo comments:\n'
             for line in thermo.comment.split("\n"):
-                string += "!   {0}\n".format(line) 
+                string += "! {0}\n".format(line) 
 
     # Line 1
     string += '{0:<16}        '.format(getSpeciesIdentifier(species))
