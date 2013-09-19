@@ -929,9 +929,7 @@ def readThermoBlock(f, speciesDict):
                     try:
                         formulaDict[label] = formula
                         speciesDict[label].thermo = thermo
-                        speciesDict[label].thermo.comment = getattr(speciesDict[label].thermo,'comment','') 
-                        if comments:
-                            speciesDict[label].thermo.comment += '\n{0}'.format(comments)
+                        speciesDict[label].thermo.comment = getattr(speciesDict[label].thermo,'comment') + comments.strip()
                         comments = ''
                     except KeyError:
                         if label.upper() in ['AR', 'N2', 'HE', 'NE']:
@@ -1220,9 +1218,8 @@ def writeThermoEntry(species, verbose = True):
     # Write thermo comments
     if verbose:
         if thermo.comment:
-            string += '! Thermo comments:\n'
             for line in thermo.comment.split("\n"):
-                string += "!   {0}\n".format(line) 
+                string += "! {0}\n".format(line) 
 
     # Line 1
     string += '{0:<16}        '.format(getSpeciesIdentifier(species))
@@ -1264,13 +1261,12 @@ def writeKineticsEntry(reaction, speciesList, verbose = True, javaLibrary = Fals
     string = ""
     
     if isinstance(reaction.kinetics, (MultiArrhenius, MultiPDepArrhenius)):
-#        if isinstance(reaction,LibraryReaction):
-#            string += '! Library reaction: {0!s}\n'.format(reaction.library.label)
         if verbose:
+            if isinstance(reaction,LibraryReaction):
+                string += '! Library reaction: {0!s}\n'.format(reaction.library.label)
             if reaction.kinetics.comment:
-                string += '! Kinetics comments:\n'
                 for line in reaction.kinetics.comment.split("\n"):
-                    string += "!   {0}\n".format(line) 
+                    string += "! {0}\n".format(line) 
         for kinetics in reaction.kinetics.arrhenius:
             if isinstance(reaction,LibraryReaction):
                 new_reaction = LibraryReaction( index=reaction.index,
@@ -1290,10 +1286,7 @@ def writeKineticsEntry(reaction, speciesList, verbose = True, javaLibrary = Fals
             string += "DUPLICATE\n"
         return string + "\n"
     
-    if verbose:
-        # First line of comment contains reaction equation
-        string += '! {0!s}\n'.format(reaction)
-        
+    if verbose:        
         # Next line of comment contains Chemkin and RMG indices
         global __chemkin_reaction_count
         if __chemkin_reaction_count is not None:
@@ -1302,23 +1295,16 @@ def writeKineticsEntry(reaction, speciesList, verbose = True, javaLibrary = Fals
         
         # Next line of comment contains information about the type of reaction
         if isinstance(reaction, TemplateReaction):
-            string += '! Template reaction: {0!s} [{1!s}]\n'.format(reaction.family.label, ','.join([group.label for group in reaction.template]))
+            string += '! Template reaction: {0!s}\n'.format(reaction.family.label)
         elif isinstance(reaction, LibraryReaction):
             string += '! Library reaction: {0!s}\n'.format(reaction.library.label)
         elif isinstance(reaction, PDepReaction):
-            string += '! PDep reaction: {0!s}\n'.format(reaction.network)
-        
-        # Next line of comment contains flux pairs
-        if reaction.pairs is not None:
-            string += '! Flux pairs: {0}\n'.format(
-                '; '.join(['{0!s}, {1!s}'.format(getSpeciesIdentifier(reactant), getSpeciesIdentifier(product)) for reactant, product in reaction.pairs])
-            )
+            string += '! PDep reaction: {0!s}\n'.format(reaction.network)                         
     
         # Remaining lines of comments taken from reaction kinetics
         if reaction.kinetics.comment:
-            string += '! Kinetics comments:\n'
             for line in reaction.kinetics.comment.split("\n"):
-                string += "!   {0}\n".format(line)                               
+                string += "! {0}\n".format(line)                               
     
     kinetics = reaction.kinetics
     numReactants = len(reaction.reactants)
