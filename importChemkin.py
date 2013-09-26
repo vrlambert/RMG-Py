@@ -1332,7 +1332,7 @@ $('#unconfirmedspecies_count').html("("+json.unconfirmed+")");
         for i, reaction in enumerate(self.chemkinReactionsUnmatched):
             reaction_string = []
             for token in str(reaction).split():
-                if token in ['+', '<=>']:
+                if token in ['+', '<=>', '=>']:
                     pass
                 elif token in self.speciesDict_rmg:
                     token = img(self.speciesDict_rmg[token])
