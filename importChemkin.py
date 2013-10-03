@@ -20,6 +20,7 @@ import os.path
 import argparse
 import logging
 import re
+import codecs
 
 import cherrypy
 from cherrypy.lib.static import serve_file
@@ -1059,8 +1060,10 @@ class ModelMatcher():
         with open(self.RMGdictionaryFile, 'w') as f:
             f.write("\n")
         try:
-            with open('source.txt') as f:
+            with codecs.open('source.txt', encoding='utf-8', errors='replace') as f:
                 source = f.read()
+                source = source.encode('ascii', errors='replace')
+                print source
         except IOError:
             source = "Unknown source"
         with open(self.outputThermoFile, 'w') as f:
@@ -1076,7 +1079,10 @@ longDesc = u"\""
 "\""
 recommended = False
 
-""".format(name=thermo_file.replace('"', ''), shortDesc=os.path.abspath(thermo_file).replace('"', ''), longDesc=source.strip()))
+""".format(name=thermo_file.replace('"', ''),
+           shortDesc=os.path.abspath(thermo_file).replace('"', ''),
+           longDesc=source.strip())
+          )
 
         self.identifySmallMolecules()
 
