@@ -1106,7 +1106,7 @@ class ModelMatcher():
         try:
             with codecs.open('source.txt', encoding='utf-8', errors='replace') as f:
                 source = f.read()
-                source = source.encode('ascii', errors='replace')
+                source = source.encode('ascii', 'replace')
                 print source
         except IOError:
             source = "Unknown source"
