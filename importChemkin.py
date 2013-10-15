@@ -1528,7 +1528,7 @@ recommended = False
     @cherrypy.expose
     def index(self):
         location = os.path.abspath(self.args.reactions or self.args.species)
-        return self.html_head + """
+        return self.html_head() + """
 <script>
 function alsoUpdate(json) {
 $('#identified_count').html("("+json.confirmed+")");
@@ -1554,14 +1554,14 @@ $('#thermomatches_count').html("("+json.thermomatches+")");
     @cherrypy.expose
     def identified_html(self):
         img = self._img
-        return (self.html_head + '<h1>{0} Identified Species</h1><table style="width:500px"><tr>'.format(len(self.identified_labels)) +
+        return (self.html_head() + '<h1>{0} Identified Species</h1><table style="width:500px"><tr>'.format(len(self.identified_labels)) +
                 "</tr>\n<tr>".join(["<td>{number}</td><td>{label}</td><td>{img}</td>".format(img=img(self.speciesDict_rmg[lab]), label=lab, number=n + 1) for n, lab in enumerate(self.identified_labels)]) +
                 '</tr></table>' + self.html_tail)
 
     @cherrypy.expose
     def thermomatches_html(self):
         img = self._img
-        output = [self.html_head, '<h1>{0} Thermochemistry Matches</h1><table style="width:800px">'.format(len(self.thermoMatches))]
+        output = [self.html_head(), '<h1>{0} Thermochemistry Matches</h1><table style="width:800px">'.format(len(self.thermoMatches))]
         for chemkinLabel, rmgSpecsDict in self.thermoMatches.iteritems():
             label = chemkinLabel
             if len(rmgSpecsDict) > 1:
@@ -1585,7 +1585,7 @@ $('#thermomatches_count').html("("+json.thermomatches+")");
     @cherrypy.expose
     def tentative_html(self):
         img = self._img
-        output = [self.html_head, '<h1>{0} Tentative Matches</h1><table style="width:800px">'.format(len(self.tentativeMatches))]
+        output = [self.html_head(), '<h1>{0} Tentative Matches</h1><table style="width:800px">'.format(len(self.tentativeMatches))]
         output.append("<tr><th>Name</th><th>Molecule</th><th>&Delta;H&deg;<sub>f</sub>(298K)</th><th>Matching Thermo</th></tr>")
         for (chemkinLabel, rmgSpec, deltaH) in self.tentativeMatches:
             output.append("<tr><td>{label}</td><td>{img}</td><td title='{Hsource}'>{delH:.1f} kJ/mol</td>".format(img=img(rmgSpec), label=chemkinLabel, delH=deltaH, Hsource=rmgSpec.thermo.comment))
@@ -1611,7 +1611,7 @@ $('#thermomatches_count').html("("+json.thermomatches+")");
 
     @cherrypy.expose
     def unconfirmedspecies_html(self):
-        output = [self.html_head, '<h1>{0} Unconfirmed species</h1><table style="width:500px">'.format(len(self.speciesList) - len(self.identified_labels) - len(self.manualMatchesToProcess))]
+        output = [self.html_head(), '<h1>{0} Unconfirmed species</h1><table style="width:500px">'.format(len(self.speciesList) - len(self.identified_labels) - len(self.manualMatchesToProcess))]
         for label in [s.label for s in self.speciesList]:
             if label in self.identified_labels:
                 continue
@@ -1626,7 +1626,7 @@ $('#thermomatches_count').html("("+json.thermomatches+")");
     @cherrypy.expose
     def species_html(self, sort="ck"):
         img = self._img
-        output = [self.html_head, '<h1>All {0} Species</h1><table>'.format(len(self.speciesList))]
+        output = [self.html_head(), '<h1>All {0} Species</h1><table>'.format(len(self.speciesList))]
         tentativeDict = dict((chemkinLabel, (rmgSpec, deltaH)) for (chemkinLabel, rmgSpec, deltaH) in self.tentativeMatches)
         manualDict = dict((chemkinLabel, rmgSpec) for (chemkinLabel, rmgSpec) in self.manualMatchesToProcess)
 
@@ -1683,7 +1683,7 @@ $('#thermomatches_count').html("("+json.thermomatches+")");
     @cherrypy.expose
     def unmatchedreactions_html(self):
         img = self._img
-        output = [self.html_head, '<h1>{0} Unmatched Reactions</h1><table style="width:500px"><tr>'.format(len(self.chemkinReactionsUnmatched)) ]
+        output = [self.html_head(), '<h1>{0} Unmatched Reactions</h1><table style="width:500px"><tr>'.format(len(self.chemkinReactionsUnmatched)) ]
         for i, reaction in enumerate(self.chemkinReactionsUnmatched):
             reaction_string = []
             for token in str(reaction).split():
@@ -1727,7 +1727,7 @@ $('#thermomatches_count').html("("+json.thermomatches+")");
                 flatVotes[(chemkinLabel, matchingSpecies)] = votingReactions
                 chemkinControversy[chemkinLabel] += len(votingReactions)
                 rmgControversy[matchingSpecies] = rmgControversy.get(matchingSpecies, 0) + len(votingReactions)
-        output = [self.html_head]
+        output = [self.html_head()]
         output.append("<h1>Votes</h1>")
         for chemkinLabel in sorted(chemkinControversy.keys(), key=lambda label:-chemkinControversy[label]):
             output.append("<hr id='{0}' />".format(chemkinLabel))
@@ -1784,7 +1784,7 @@ $('#thermomatches_count').html("("+json.thermomatches+")");
             print "Couldn't identify {0}. NCI resolver responded {1} to request for {2}".format(smiles, e, url)
             response = "Unknown"
 
-        output = [self.html_head]
+        output = [self.html_head()]
         output.append("<h1>Edit {0}</h1>".format(ckLabel))
         output.append("""
             <form action="edit.html" method="get">
@@ -1816,7 +1816,7 @@ $('#thermomatches_count').html("("+json.thermomatches+")");
 
     @cherrypy.expose
     def propose_html(self, ckLabel=None):
-        output = [self.html_head]
+        output = [self.html_head()]
         output.append("<h1>Propose {0}</h1>".format(ckLabel))
         output.append("""
             <form action="edit.html" method="get">
@@ -1923,8 +1923,10 @@ $('#thermomatches_count').html("("+json.thermomatches+")");
                   'thermomatches': thermomatches,
         }
         return json.dumps(answer)
-
-    html_head = """
+    
+        
+    def html_head(self):
+        return """
 <html>
 <head>
 <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
@@ -1932,7 +1934,7 @@ $('#thermomatches_count').html("("+json.thermomatches+")");
 function alsoUpdate(json) {
  // replace this with another <script> block on a specific page if you want it to do something
  }
-var lastAlert = 5;
+var lastAlert = """ + str(min(len(self.identified_labels) - len(self.identified_unprocessed_labels), 5)) + """;
 var progressUpdates = 0;
 function updateStats() {
     $.getJSON( "progress.json", function( json ) {
@@ -1947,7 +1949,7 @@ function updateStats() {
                 alert("Input needed! Please confirm a match.");
                 lastAlert = json.processed;
             }
-            repeater = setTimeout(updateStats, 300000); // do again in 5 minutes
+            repeater = setTimeout(updateStats, 10000); // do again in 10 seconds
             progressUpdates++;
         }).fail(function( jqxhr, textStatus, error ) {
               var err = textStatus + ', ' + error;
