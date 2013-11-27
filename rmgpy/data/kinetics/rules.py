@@ -472,8 +472,8 @@ class KineticsRules(Database):
             
             # We found one or more results! Let's average them together
             kinetics = self.__getAverageKinetics([k for k, t in kineticsList])
-            kinetics.comment += '(Average of {0})'.format(
-                ' + '.join([k.comment if k.comment != '' else ';'.join([g.label for g in t]) for k, t in kineticsList]),
+            kinetics.comment += 'Average of ({0}). '.format(
+                ' + '.join([k.comment if k.comment != '' else ','.join([g.label for g in t]) for k, t in kineticsList]),
             )
             entry = Entry(
                 index = 0,
@@ -490,8 +490,14 @@ class KineticsRules(Database):
         return None
 
     def __getAverageKinetics(self, kineticsList):
-        # Although computing via logA is slower, it is necessary because
-        # otherwise you could overflow if you are averaging too many values
+        """
+        Based on averaging log k. For most complex case:
+        k = AT^n * exp(-Ea+alpha*H)
+        log k = log(A) * nlog(T) * (-Ea + alpha*H)
+        
+        Hence we average n, Ea, and alpha arithmetically, but we
+        average log A (geometric average) 
+        """
         logA = 0.0; n = 0.0; E0 = 0.0; alpha = 0.0
         count = len(kineticsList)
         for kinetics in kineticsList:

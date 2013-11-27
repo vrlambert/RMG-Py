@@ -46,8 +46,8 @@ from quantity import Quantity
 from data.base import Entry
 from data.kinetics import TemplateReaction, LibraryReaction
 from rmg.pdep import PDepReaction
-from rmgpy.pdep import LennardJones
 from rmgpy.molecule import Molecule
+from rmgpy.transport import TransportData
 
 __chemkin_reaction_count = None
     
@@ -405,7 +405,7 @@ def readKineticsEntry(entry, speciesDict, Aunits, Eunits):
                             raise ChemkinError(error_msg)
                         if collider.strip() in speciesDict:
                             efficiencies[speciesDict[collider.strip()].molecule[0]] = efficiency
-                        else:
+                        else: # try it with capital letters? Not sure whose malformed chemkin files this is needed for.
                             efficiencies[speciesDict[collider.strip().upper()].molecule[0]] = efficiency
                 except IndexError:
                     error_msg = 'Could not read collider efficiencies for reaction: {0}.\n'.format(reaction)
@@ -679,7 +679,7 @@ def loadTransportFile(path, speciesDict):
                 label = line[0:16].strip()
                 data = line[16:].split()
                 species = speciesDict[label]
-                species.lennardJones = LennardJones(
+                species.transportData = TransportData(
                     sigma = (float(data[2]),'angstrom'),
                     epsilon = (float(data[1]),'K'),
                 )
@@ -703,7 +703,7 @@ def loadChemkinFile(path, dictionaryPath=None, transportPath=None, readComments 
     if dictionaryPath:
         speciesDict = loadSpeciesDictionary(dictionaryPath)
     
-    with open(path, 'r') as f:
+    with open(path, 'r+b') as f:
     
         line0 = f.readline()
         while line0 != '':        
@@ -954,7 +954,9 @@ def readThermoBlock(f, speciesDict):
                     try:
                         formulaDict[label] = formula
                         speciesDict[label].thermo = thermo
-                        speciesDict[label].thermo.comment = getattr(speciesDict[label].thermo,'comment') + comments.strip()
+                        speciesDict[label].thermo.comment = getattr(speciesDict[label].thermo,'comment','') 
+                        if comments:
+                            speciesDict[label].thermo.comment += '\n{0}'.format(comments)
                         comments = ''
                     except KeyError:
                         if label.upper() in ['AR', 'N2', 'HE', 'NE']:
@@ -1277,62 +1279,11 @@ def writeThermoEntry(species, verbose = True):
 
 ################################################################################
 
-def writeKineticsEntry(reaction, speciesList, verbose = True, javaLibrary = False):
+def writeReactionString(reaction, javaLibrary = False):
     """
-    Return a string representation of the reaction as used in a Chemkin
-    file. Use verbose = True to turn on comments.  Use javaLibrary = True in order to 
-    generate a kinetics entry suitable for an RMG-Java kinetics library.  
+    Return a reaction string in chemkin format.
     """
-    string = ""
-    
-    if isinstance(reaction.kinetics, (MultiArrhenius, MultiPDepArrhenius)):
-        if verbose:
-            if isinstance(reaction,LibraryReaction):
-                string += '! Library reaction: {0!s}\n'.format(reaction.library.label)
-            if reaction.kinetics.comment:
-                for line in reaction.kinetics.comment.split("\n"):
-                    string += "! {0}\n".format(line) 
-        for kinetics in reaction.kinetics.arrhenius:
-            if isinstance(reaction,LibraryReaction):
-                new_reaction = LibraryReaction( index=reaction.index,
-                     reactants=reaction.reactants,
-                     products=reaction.products,
-                     reversible=reaction.reversible,
-                     kinetics=kinetics,
-                     library=reaction.library
-                     )
-            else:
-                new_reaction = Reaction( index=reaction.index,
-                         reactants=reaction.reactants,
-                         products=reaction.products,
-                         reversible=reaction.reversible,
-                         kinetics=kinetics)
-            string += writeKineticsEntry(new_reaction, speciesList, verbose, javaLibrary)
-            string += "DUPLICATE\n"
-        return string + "\n"
-    
-    if verbose:        
-        # Next line of comment contains Chemkin and RMG indices
-        global __chemkin_reaction_count
-        if __chemkin_reaction_count is not None:
-            __chemkin_reaction_count += 1
-            string += "! Reaction index: Chemkin #{0:d}; RMG #{1:d}\n".format(__chemkin_reaction_count, reaction.index)
-        
-        # Next line of comment contains information about the type of reaction
-        if isinstance(reaction, TemplateReaction):
-            string += '! Template reaction: {0!s}\n'.format(reaction.family.label)
-        elif isinstance(reaction, LibraryReaction):
-            string += '! Library reaction: {0!s}\n'.format(reaction.library.label)
-        elif isinstance(reaction, PDepReaction):
-            string += '! PDep reaction: {0!s}\n'.format(reaction.network)                         
-    
-        # Remaining lines of comments taken from reaction kinetics
-        if reaction.kinetics.comment:
-            for line in reaction.kinetics.comment.split("\n"):
-                string += "! {0}\n".format(line)                               
-    
     kinetics = reaction.kinetics
-    numReactants = len(reaction.reactants)
     
     if javaLibrary:
         thirdBody = ''
@@ -1367,7 +1318,78 @@ def writeKineticsEntry(reaction, speciesList, verbose = True, javaLibrary = Fals
         reaction_string += '=>' if not reaction.reversible else '='
         reaction_string += '+'.join([getSpeciesIdentifier(product) for product in reaction.products])
         reaction_string += thirdBody
+        
+    return reaction_string
+
+################################################################################
+
+def writeTransportEntry(species, verbose = True):
+    """
+    Return a string representation of the reaction as used in a Chemkin file. Lists the 
+    """
     
+################################################################################
+
+def writeKineticsEntry(reaction, speciesList, verbose = True, javaLibrary = False):
+    """
+    Return a string representation of the reaction as used in a Chemkin
+    file. Use verbose = True to turn on comments.  Use javaLibrary = True in order to 
+    generate a kinetics entry suitable for an RMG-Java kinetics library.  
+    """
+    string = ""
+    
+    if isinstance(reaction.kinetics, (MultiArrhenius, MultiPDepArrhenius)):
+        if verbose:
+            if isinstance(reaction,LibraryReaction):
+                string += '! Library reaction: {0!s}\n'.format(reaction.library.label)
+            if reaction.kinetics.comment:
+                for line in reaction.kinetics.comment.split("\n"):
+                    string += "! {0}\n".format(line) 
+        for kinetics in reaction.kinetics.arrhenius:
+            if isinstance(reaction,LibraryReaction):
+                new_reaction = LibraryReaction( index=reaction.index,
+                     reactants=reaction.reactants,
+                     products=reaction.products,
+                     reversible=reaction.reversible,
+                     kinetics=kinetics,
+                     library=reaction.library
+                     )
+            else:
+                new_reaction = Reaction( index=reaction.index,
+                         reactants=reaction.reactants,
+                         products=reaction.products,
+                         reversible=reaction.reversible,
+                         kinetics=kinetics)
+            string += writeKineticsEntry(new_reaction, speciesList, verbose, javaLibrary)
+            string += "DUPLICATE\n"
+        return string + "\n"
+    
+    # Add to global chemkin reaction count if the kinetics is not a duplicate
+    global __chemkin_reaction_count
+    if __chemkin_reaction_count is not None:
+        __chemkin_reaction_count += 1
+            
+    if verbose:        
+        # Next line of comment contains Chemkin and RMG indices
+        if __chemkin_reaction_count is not None:
+            string += "! Reaction index: Chemkin #{0:d}; RMG #{1:d}\n".format(__chemkin_reaction_count, reaction.index)
+        
+        # Next line of comment contains information about the type of reaction
+        if isinstance(reaction, TemplateReaction):
+            string += '! Template reaction: {0!s}\n'.format(reaction.family.label)
+        elif isinstance(reaction, LibraryReaction):
+            string += '! Library reaction: {0!s}\n'.format(reaction.library.label)
+        elif isinstance(reaction, PDepReaction):
+            string += '! PDep reaction: {0!s}\n'.format(reaction.network)                         
+    
+        # Remaining lines of comments taken from reaction kinetics
+        if reaction.kinetics.comment:
+            for line in reaction.kinetics.comment.split("\n"):
+                string += "! {0}\n".format(line)                               
+    
+    kinetics = reaction.kinetics
+    numReactants = len(reaction.reactants)
+    reaction_string = writeReactionString(reaction, javaLibrary)    
     
     string += '{0!s:<51} '.format(reaction_string)
 
@@ -1520,14 +1542,32 @@ def saveTransportFile(path, species):
     """
     Save a Chemkin transport properties file to `path` on disk containing the
     transport properties of the given list of `species`.
+    
+    The first 16 columns in each line of the database are reserved for the species name
+     (Presently CHEMKIN is programmed to allow no more than 16-character names.) 
+     Columns 17 through 80 are free-format, and they contain the molecular parameters for each species. They are, in order:
+    1. An index indicating whether the molecule has a monatomic, linear or nonlinear geometrical configuration.
+       If the index is 0, the molecule is a single atom. 
+       If the index is 1 the molecule is linear, and 
+       if it is 2, the molecule is nonlinear.
+    2. The Lennard-Jones potential well depth  $\epsilon / k_B$ in Kelvins.
+    3. The Lennard-Jones collision diameter $\sigma$in Angstroms.
+    4. The dipole moment $\mu$ in Debye. Note: a Debye is $10^{-18} cm^{3/2}erg^{1/2}$.
+    5. The polarizability $\alpha$ in cubic Angstroms.
+    6. The rotational relaxation collision number $Z_rot$ at 298K.
+    7. After the last number, a comment field can be enclosed in parenthesis.
+    (from the chemkin TRANSPORT manual)
     """
     with open(path, 'w') as f:
+        f.write("! {:15} {:8} {:9} {:9} {:9} {:9} {:9} {:9}\n".format('Species','Shape', 'LJ-depth', 'LJ-diam', 'DiplMom', 'Polzblty', 'RotRelaxNum','Data'))
+        f.write("! {:15} {:8} {:9} {:9} {:9} {:9} {:9} {:9}\n".format('Name','Index', 'epsilon/k_B', 'sigma', 'mu', 'alpha', 'Zrot','Source'))
         for spec in species:
-            print spec.lennardJones
-            if (not spec.lennardJones or not spec.dipoleMoment or
-                not spec.polarizability or not spec.Zrot or 
+            print spec.transportData
+            if (not spec.transportData or
                 len(spec.molecule) == 0):
-                continue
+                missingData = True
+            else:
+                missingData = False
             
             label = getSpeciesIdentifier(spec)
             
@@ -1539,15 +1579,19 @@ def saveTransportFile(path, species):
             else:
                 shapeIndex = 2
             
-            f.write('{0:19} {1:d} {2:9.3f} {3:9.3f} {4:9.3f} {5:9.3f} {6:9.3f}\n'.format(
-                label,
-                shapeIndex,
-                spec.lennardJones.epsilon.value_si / constants.R,
-                spec.lennardJones.sigma.value_si * 1e10,
-                spec.dipoleMoment.value_si * constants.c * 1e21,
-                spec.polarizability.value_si * 1e30,
-                spec.Zrot.value_si,
-            ))
+            if missingData:
+                f.write('! {:19s} {!r}\n'.format(label, spec.transportData))
+            else:
+                f.write('{0:19} {1:d}   {2:9.3f} {3:9.3f} {4:9.3f} {5:9.3f} {6:9.3f}    ! {7:s}\n'.format(
+                    label,
+                    shapeIndex,
+                    spec.transportData.epsilon.value_si / constants.R,
+                    spec.transportData.sigma.value_si * 1e10,
+                    spec.transportData.dipoleMoment.value_si * constants.c * 1e21,
+                    spec.transportData.polarizability.value_si * 1e30,
+                    (spec.Zrot.value_si if spec.Zrot else 0),
+                    spec.transportData.comment,
+                ))
 
 def saveChemkinFile(path, species, reactions, verbose = True, checkForDuplicates=True):
     """
@@ -1565,7 +1609,7 @@ def saveChemkinFile(path, species, reactions, verbose = True, checkForDuplicates
     sorted_species = sorted(species, key=lambda species: species.index)
 
     # Elements section
-    f.write('ELEMENTS H C O N Ne Ar He Si S END\n\n')
+    f.write('ELEMENTS H C O N Ne Ar He Si S Cl END\n\n')
 
     # Species section
     f.write('SPECIES\n')
@@ -1587,6 +1631,9 @@ def saveChemkinFile(path, species, reactions, verbose = True, checkForDuplicates
 
     ## Transport section would go here
     #f.write('TRANSPORT\n')
+    #for spec in sorted_species:
+        #f.write(writeTransportEntry(spec)
+        #f.write('\n')
     #f.write('END\n\n')
 
     # Reactions section
