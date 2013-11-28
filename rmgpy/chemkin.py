@@ -195,9 +195,9 @@ def readKineticsEntry(entry, speciesDict, Aunits, Eunits):
         dEa = float(tokens[-1])
         reaction = ''.join(tokens[:-6])
     else:
-        A = float(tokens[-3])
-        n = float(tokens[-2])
-        Ea = float(tokens[-1])
+        A = Ffloat(tokens[-3])
+        n = Ffloat(tokens[-2])
+        Ea = Ffloat(tokens[-1])
         dA = 0.0
         dn = 0.0
         dEa = 0.0
